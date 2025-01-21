@@ -11,7 +11,7 @@ node_modules/
 # Logs
 logs
 *.log
-
+#TEST
 # Build directories
 dist/
 build/
