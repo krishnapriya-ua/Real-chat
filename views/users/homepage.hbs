@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bootstrap Chat UI</title>
+    <link rel="stylesheet" href="/css/home.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+   <style>
+      #backButton {
+        background-color: transparent;
+        color: white;
+        font-size: x-small;
+        margin-top: -16px;
+    }
+
+    </style>
+</head>
+<body>
+    
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-4 col-sm-12 sm-12 chat-list d-md-block" id="chatList">
+            <div class="p-3">
+                <input type="text" class="form-control" placeholder="Search users..." id="searchInput">
+            </div>
+            {{#each user}}
+            <div class="chat-item" data-userid="{{this._id}}" data-username="{{this.fullname}}" data-status="{{this.status}}" onclick="selectuser(this)">
+                <div>
+                    <p style="color:#1d6b9a">{{tolowercase this.fullname}} <br>
+                    <span class="user-status" style="font-size: smaller; background-color: {{#if (eq this.status 'online')}}#d4edda{{/if}}">
+                        {{this.status}}
+                    </span>
+                    </p>
+                </div>
+            </div>
+            {{/each}}
+
+            <p class="mt-5" style="color:#1d6b9a;margin-left:12px">Hey {{fullname}}</p>
+            <a href="/logout"><p style="color:#1d6b9a;margin-left:12px">Want to logout?</p></a>
+        </div>
+
+        <div class="col-md-8 col-sm-12 sm-12 chat-window" id="chatWindow">
+            <div class="chat-header" style=" height:90px">
+                 <button class="btn btn-secondary d-md-none me-2" id="backButton" onclick="goBackToChatList()"><-</button>
+   
+                <h6 id="chatWith">Select a user to chat with</h6>
+                <p style="color: white;font-size: small;" id="userStatus">{{user.status}}</p>
+            </div>
+
+            <div class="chat-body" id="chatBody">
+                <ul id="messages"></ul>
+            </div>
+
+            <div class="chat-footer" id="chatFooter" style="display: none;">
+                <div class="input-group" style="display: block;">
+                    <form action="" id="form" class="d-flex">
+                        <input type="text" class="form-control me-2" id="input" placeholder="Type a message..." style="border-radius: 0;">
+                        <button class="btn btn-primary" style="background-color: #1d6b9a; border-radius: 0%;" type="submit">Send</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script src="/socket.io/socket.io.js"></script>
+
+<script>
+  const socket = io({ query: { userId: "{{currentuser}}" } });
+
+  const currentuserid = "{{currentuser}}";
+  console.log('Current User ID:', currentuserid);
+
+    socket.on('user status', (data) => {
+     const { userId, status } = data;
+
+       
+        const userElement = document.querySelector(`.chat-item[data-userid="${userId}"]`);
+
+        if (userElement) {
+            const statusElement = userElement.querySelector('.user-status');
+
+           
+            statusElement.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+
+            if (status === 'online') {
+                statusElement.style.backgroundColor = '#d4edda'; 
+            } else {
+                statusElement.style.backgroundColor = ''; 
+            }
+             const chatWithUserId = document.querySelector('.chat-item.active')?.getAttribute('data-userid');
+            if (chatWithUserId === userId) {
+                document.getElementById('userStatus').textContent = status.charAt(0).toUpperCase() + status.slice(1);
+            }
+        }
+    });
+
+socket.on('connect', () => {
+    console.log('User connected to their room');
+});
+
+function selectuser(element) {
+    const username = element.getAttribute('data-username');
+    const status = element.getAttribute('data-status');
+    const userid = element.getAttribute('data-userid');
+
+    document.querySelectorAll('.chat-item').forEach(item => item.classList.remove('active'));
+    element.classList.add('active');
+
+    document.getElementById('chatWith').textContent = ` ${username}`;
+    document.getElementById('userStatus').textContent = status.charAt(0).toUpperCase() + status.slice(1);
+    document.getElementById('chatFooter').style.display = 'block';
+     if (window.innerWidth < 768) {
+        document.getElementById('chatList').classList.add('d-none');
+        document.getElementById('chatWindow').classList.remove('d-none');
+    }
+
+    fetch(`/chat/${userid}?currentuser=${currentuserid}`)
+        .then(response => response.json())
+        .then(data => {
+            const chatBody = document.getElementById('messages');
+            chatBody.innerHTML = ''; 
+            data.messages.forEach(msg => {
+                const item = document.createElement('li');
+                item.classList.add(msg.sender === currentuserid ? 'sent' : 'received');
+                item.textContent = msg.text;
+                chatBody.appendChild(item);
+            });
+            chatBody.scrollTop = chatBody.scrollHeight;
+        })
+        .catch(error => {
+            console.log('Error fetching chat data:', error);
+        });
+}
+function goBackToChatList() {
+    if (window.innerWidth < 768) {
+        document.getElementById('chatList').classList.remove('d-none');
+        document.getElementById('chatWindow').classList.add('d-none');
+    }
+}
+
+const form = document.getElementById('form');
+const input = document.getElementById('input');
+const messages = document.getElementById('messages');
+
+form.addEventListener('submit', (e) => {
+    e.preventDefault();
+
+    const selectedChatItem = document.querySelector('.chat-item.active');
+    const receiverid = selectedChatItem ? selectedChatItem.getAttribute('data-userid') : null;
+
+    if (input.value && receiverid) {
+        const messageData = {
+            text: input.value,
+            sender: currentuserid,
+            receiver: receiverid
+        };
+
+    
+        socket.emit('chat message', messageData);
+        input.value = '';  
+    }
+});
+
+socket.on('chat message', (msg) => {
+    const selectedChatItem = document.querySelector('.chat-item.active');
+    const currentChatUserId = selectedChatItem ? selectedChatItem.getAttribute('data-userid') : null;
+
+    
+    if (msg.sender === currentuserid || msg.sender === currentChatUserId) {
+        const item = document.createElement('li');
+        if (msg.sender === currentuserid) {
+            item.classList.add('sent'); 
+        } else {
+            item.classList.add('received'); 
+        }
+        item.textContent = msg.text;
+        messages.appendChild(item);
+        messages.scrollTop = messages.scrollHeight;  
+    }
+});
+document.getElementById('searchInput').addEventListener('input', function() {
+    const searchQuery = this.value.trim(); // Capture the input value
+
+    fetch(`/searchuser?query=${searchQuery}`)
+        .then(response => response.json())
+        .then(users => {
+            const chatlist = document.querySelector('.chat-list');
+            // Instead of clearing the entire chat list, just clear the user items
+            const userItems = chatlist.querySelectorAll('.chat-item');
+            userItems.forEach(item => item.remove()); // Remove old user items
+
+            users.forEach(user => {
+                const userElement = document.createElement('div');
+                userElement.classList.add('chat-item');
+                userElement.setAttribute('data-userid', user._id);
+                userElement.setAttribute('data-username', user.fullname);
+                userElement.setAttribute('data-status', user.status);
+                
+                userElement.innerHTML = `
+                    <div>
+                    <p style="color:#1d6b9a">${user.fullname.toLowerCase()}<br>
+                    <span class="user-status" style="font-size: smaller; background-color: ${user.status === 'online' ? '#d4edda' : ''}">
+                        ${user.status}
+                    </span>
+                    </p>
+                    </div>
+                `;
+
+                userElement.addEventListener('click', function() {
+                    selectuser(this); // Use existing selectuser function
+                });
+
+                chatlist.appendChild(userElement);
+            });
+
+            // Retain focus on the search input
+            this.focus();
+        })
+        .catch(error => {
+            console.error('Error searching users:', error);
+        });
+});
+
+
+</script>
+
+</body>
+</html>
